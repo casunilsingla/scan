@@ -4,10 +4,10 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Path to the Google Sheets credentials JSON file
-CREDENTIALS_FILE = 'path_to_credentials.json'
+CREDENTIALS_FILE = 'scan-390611-25fc1daa0744.json'
 
 # Google Sheets document ID
-DOCUMENT_ID = 'your_document_id'
+DOCUMENT_ID = '1kTClIxeAcZhwXufiGUhxbJTn5X24fhIcjsxNS9Do9Ew'
 
 # Connect to Google Sheets
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
