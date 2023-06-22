@@ -47,11 +47,19 @@ def append_to_sheet(barcode_data):
                     winsound.PlaySound("DH.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for Company B in WAV format
                 # Add more conditions for other company names and corresponding sound effects
 
-            # Append the barcode data to Sheet 1
+            # Check for duplicate entry in Sheet 1
             sheet1 = spreadsheet.sheet1
-            row = [barcode_data]
-            sheet1.append_row(row)
-            print("Data saved successfully.")
+            existing_data = sheet1.get_all_values()
+            if any(barcode_data in row for row in existing_data):
+                print("Error: Duplicate entry.")
+                # Play sound effect for duplicate entry
+                winsound.PlaySound("error.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for duplicate entry in WAV format
+            else:
+                # Append the barcode data to Sheet 1
+                sheet1 = spreadsheet.sheet1
+                row = [barcode_data]
+                sheet1.append_row(row)
+                print("Data saved successfully.")
             break
     else:
         # Scanned barcode data not found in Sheet 2 or did not validate
