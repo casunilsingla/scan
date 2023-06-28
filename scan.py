@@ -3,6 +3,8 @@ from pyzbar import pyzbar
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import winsound
+import tkinter as tk
+from tkinter import filedialog
 
 # Path to the Google Sheets credentials JSON file
 CREDENTIALS_FILE = 'scan-390611-25fc1daa0744.json'
@@ -17,7 +19,9 @@ client = gspread.authorize(credentials)
 spreadsheet = client.open_by_key(DOCUMENT_ID)
 sheet = spreadsheet.sheet1
 
-import winsound
+# Create the Tkinter app
+app = tk.Tk()
+app.title("Barcode Scanner & Data Entry App")
 
 # Function to append barcode data to Google Sheets and validate against sheet data
 def append_to_sheet(barcode_data):
@@ -33,39 +37,38 @@ def append_to_sheet(barcode_data):
         if row[0] == barcode_data:
             # Print the corresponding 3PL name and company name
             if len(row) > 1:
-                print("3PL Name:", row[1])
+                info_label.config(text="3PL Name: " + row[1])
             if len(row) > 2:
                 company_name = row[2]
-                print("Company Name:", company_name)
+                info_label.config(text=info_label.cget("text") + "\nCompany Name: " + company_name)
 
-                # Play sound effect based on company name
-                if company_name == "Nayra":
-                    winsound.PlaySound("Nayra.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for Company A in WAV format
-                elif company_name == "Ni":
-                    winsound.PlaySound("Ni.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for Company B in WAV format
-                elif company_name == "DH":
-                    winsound.PlaySound("DH.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for Company B in WAV format
-                # Add more conditions for other company names and corresponding sound effects
+                # Play sound effect based on company name if enable_company_sound is True
+                if enable_company_sound:
+                    if company_name == "Nayra":
+                        winsound.PlaySound("Nayra.wav", winsound.SND_FILENAME)
+                    elif company_name == "Ni":
+                        winsound.PlaySound("Ni.wav", winsound.SND_FILENAME)
+                    elif company_name == "DH":
+                        winsound.PlaySound("DH.wav", winsound.SND_FILENAME)
+                    # Add more conditions for other company names and corresponding sound effects
 
             # Check for duplicate entry in Sheet 1
             sheet1 = spreadsheet.sheet1
             existing_data = sheet1.get_all_values()
             if any(barcode_data in row for row in existing_data):
-                print("Error: Duplicate entry.")
-                # Play sound effect for duplicate entry
-                winsound.PlaySound("error.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for duplicate entry in WAV format
+                info_label.config(text=info_label.cget("text") + "\nError: Duplicate entry.")
+                winsound.PlaySound("error.wav", winsound.SND_FILENAME)
             else:
                 # Append the barcode data to Sheet 1
                 sheet1 = spreadsheet.sheet1
                 row = [barcode_data]
                 sheet1.append_row(row)
-                print("Data saved successfully.")
+                info_label.config(text=info_label.cget("text") + "\nData saved successfully.")
             break
     else:
         # Scanned barcode data not found in Sheet 2 or did not validate
-        print("Error: Barcode not found or data did not validate.")
-        # Play sound effect for invalid data
-        winsound.PlaySound("error.wav", winsound.SND_FILENAME)  # Replace with the path to your sound effect file for invalid data in WAV format
+        info_label.config(text=info_label.cget("text") + "\nError: Barcode not found or data did not validate.")
+        winsound.PlaySound("error.wav", winsound.SND_FILENAME)
 
 # Barcode scanning function
 def scan_barcodes():
@@ -82,7 +85,7 @@ def scan_barcodes():
         for barcode in barcodes:
             # Extract barcode data
             barcode_data = barcode.data.decode('utf-8')
-            print("Scanned Barcode:", barcode_data)
+            barcode_label.config(text="Scanned Barcode: " + barcode_data)
             append_to_sheet(barcode_data)
 
         # Display the frame
@@ -97,29 +100,49 @@ def scan_barcodes():
     cv2.destroyAllWindows()
 
 # Manual barcode entry function
-def manual_entry():
-    while True:
-        barcode_data = input("Enter Barcode (q to quit): ")
-
-        if barcode_data == 'q':
-            break
-
-        append_to_sheet(barcode_data)
-
-# Main function
-def main():
-    print("Barcode Scanner & Data Entry App")
-    print("1. Scan Barcodes")
-    print("2. Manual Entry")
-
-    choice = input("Select an option: ")
-
-    if choice == '1':
-        scan_barcodes()
-    elif choice == '2':
-        manual_entry()
+def manual_entry(event=None):
+    barcode_data = barcode_entry.get()
+    if barcode_data == '':
+        info_label.config(text="Error: Empty barcode.")
+        winsound.PlaySound("error.wav", winsound.SND_FILENAME)
     else:
-        print("Invalid choice. Exiting...")
+        append_to_sheet(barcode_data)
+        barcode_entry.delete(0, tk.END)
 
-# Run the app
-main()
+# Toggle company sound function
+def toggle_company_sound():
+    global enable_company_sound
+    enable_company_sound = not enable_company_sound
+    if enable_company_sound:
+        info_label.config(text=info_label.cget("text") + "\nCompany sound enabled.")
+    else:
+        info_label.config(text=info_label.cget("text") + "\nCompany sound disabled.")
+
+# Create the GUI elements
+barcode_label = tk.Label(app, text="Scanned Barcode: ")
+barcode_label.pack()
+
+info_label = tk.Label(app, text="")
+info_label.pack()
+
+scan_button = tk.Button(app, text="Scan Barcodes", command=scan_barcodes)
+scan_button.pack()
+
+manual_entry_frame = tk.Frame(app)
+manual_entry_frame.pack()
+
+manual_entry_label = tk.Label(manual_entry_frame, text="Manual Entry: ")
+manual_entry_label.pack(side=tk.LEFT)
+
+barcode_entry = tk.Entry(manual_entry_frame)
+barcode_entry.pack(side=tk.LEFT)
+barcode_entry.bind('<Return>', manual_entry)  # Bind Enter key press to manual_entry function
+
+toggle_sound_button = tk.Button(app, text="Toggle Company Sound", command=toggle_company_sound)
+toggle_sound_button.pack()
+
+# Initialize the company sound status
+enable_company_sound = True
+
+# Start the Tkinter event loop
+app.mainloop()
