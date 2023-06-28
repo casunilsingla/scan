@@ -1,148 +1,108 @@
-import cv2
-from pyzbar import pyzbar
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import winsound
+import os
 import tkinter as tk
-from tkinter import filedialog
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+import winsound
 
-# Path to the Google Sheets credentials JSON file
-CREDENTIALS_FILE = 'scan-390611-25fc1daa0744.json'
+# Google Sheets API credentials
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+CREDS_FILE = 'scan-390611-25fc1daa0744.json'  # Path to your credentials JSON file
+SHEET_ID = '1JvvmA_Lbr55XwYD2atYzeoAbD_ntOJxPx9IDKyCbK5c'  # ID of the Google Sheet
 
-# Google Sheets document ID
-DOCUMENT_ID = '1kTClIxeAcZhwXufiGUhxbJTn5X24fhIcjsxNS9Do9Ew'
+# Create GUI
+root = tk.Tk()
+root.title('Ni Fashion')
 
-# Connect to Google Sheets
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-client = gspread.authorize(credentials)
-spreadsheet = client.open_by_key(DOCUMENT_ID)
-sheet = spreadsheet.sheet1
+# Entry field
+lbl_awb = tk.Label(root, text='AWB:')
+lbl_awb.grid(row=0, column=0)
+entry_awb = tk.Entry(root)
+entry_awb.grid(row=0, column=1)
 
-# Create the Tkinter app
-app = tk.Tk()
-app.title("Barcode Scanner & Data Entry App")
+# Labels for displaying 3PL and company names
+lbl_3pl = tk.Label(root, text='3PL:')
+lbl_3pl.grid(row=1, column=0)
+lbl_company = tk.Label(root, text='Company:')
+lbl_company.grid(row=2, column=0)
 
-# Function to append barcode data to Google Sheets and validate against sheet data
-def append_to_sheet(barcode_data):
-    # Open Sheet 2 within the Google Sheet document
-    sheet_name = 'Sheet2'  # Replace with the name of Sheet 2
-    worksheet = spreadsheet.worksheet(sheet_name)
+# Label for displaying error or duplicate message
+lbl_message = tk.Label(root, text='')
+lbl_message.grid(row=3, columnspan=2)
 
-    # Get all values from Sheet 2
-    sheet_values = worksheet.get_all_values()
+# Google Sheets API authentication
+creds = service_account.Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
 
-    # Search for the scanned barcode data in Sheet 2
-    for row in sheet_values:
-        if row[0] == barcode_data:
-            # Print the corresponding 3PL name and company name
-            if len(row) > 1:
-                info_label.config(text="3PL Name: " + row[1])
-            if len(row) > 2:
-                company_name = row[2]
-                info_label.config(text=info_label.cget("text") + "\nCompany Name: " + company_name)
+# Connect to Google Sheets API
+service = build('sheets', 'v4', credentials=creds)
 
-                # Play sound effect based on company name if enable_company_sound is True
-                if enable_company_sound:
-                    if company_name == "Nayra":
-                        winsound.PlaySound("Nayra.wav", winsound.SND_FILENAME)
-                    elif company_name == "Ni":
-                        winsound.PlaySound("Ni.wav", winsound.SND_FILENAME)
-                    elif company_name == "DH":
-                        winsound.PlaySound("DH.wav", winsound.SND_FILENAME)
-                    # Add more conditions for other company names and corresponding sound effects
+# Function to submit data
+def submit_data(event=None):
+    awb = entry_awb.get()
 
-            # Check for duplicate entry in Sheet 1
-            sheet1 = spreadsheet.sheet1
-            existing_data = sheet1.get_all_values()
-            if any(barcode_data in row for row in existing_data):
-                info_label.config(text=info_label.cget("text") + "\nError: Duplicate entry.")
-                winsound.PlaySound("error.wav", winsound.SND_FILENAME)
-            else:
-                # Append the barcode data to Sheet 1
-                sheet1 = spreadsheet.sheet1
-                row = [barcode_data]
-                sheet1.append_row(row)
-                info_label.config(text=info_label.cget("text") + "\nData saved successfully.")
-            break
-    else:
-        # Scanned barcode data not found in Sheet 2 or did not validate
-        info_label.config(text=info_label.cget("text") + "\nError: Barcode not found or data did not validate.")
-        winsound.PlaySound("error.wav", winsound.SND_FILENAME)
+    # Get data from Data to check for duplicates
+    data_range = 'Data!A:A'
+    result = service.spreadsheets().values().get(
+        spreadsheetId=SHEET_ID,
+        range=data_range
+    ).execute()
+    data_values = result.get('values', [])
 
-# Barcode scanning function
-def scan_barcodes():
-    # Initialize camera
-    cap = cv2.VideoCapture(0)
-
-    while True:
-        # Capture frame
-        ret, frame = cap.read()
-
-        # Decode barcodes
-        barcodes = pyzbar.decode(frame)
-
-        for barcode in barcodes:
-            # Extract barcode data
-            barcode_data = barcode.data.decode('utf-8')
-            barcode_label.config(text="Scanned Barcode: " + barcode_data)
-            append_to_sheet(barcode_data)
-
-        # Display the frame
-        cv2.imshow('Barcode Scanner', frame)
-
-        # Wait for 'q' key to exit
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+    # Check for duplicates in Data sheet
+    duplicate = False
+    for row in data_values:
+        if len(row) > 0 and awb == row[0]:
+            duplicate = True
+            lbl_message.config(text='Duplicate AWB!')
+            # Play duplicate validation sound
+            winsound.PlaySound('sound3.wav', winsound.SND_FILENAME)
             break
 
-    # Release the capture and close the window
-    cap.release()
-    cv2.destroyAllWindows()
+    if not duplicate:
+        # Get data from Manifest sheet for validation and corresponding names
+        validation_range = 'Manifest!D:F'
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID,
+            range=validation_range
+        ).execute()
+        validation_data = result.get('values', [])
 
-# Manual barcode entry function
-def manual_entry(event=None):
-    barcode_data = barcode_entry.get()
-    if barcode_data == '':
-        info_label.config(text="Error: Empty barcode.")
-        winsound.PlaySound("error.wav", winsound.SND_FILENAME)
-    else:
-        append_to_sheet(barcode_data)
-        barcode_entry.delete(0, tk.END)
+        # Perform validation against Manifest sheet data and get corresponding names
+        valid = False
+        for row in validation_data:
+            if len(row) > 2 and awb == row[0]:
+                valid = True
+                lbl_3pl.config(text='3PL: ' + row[2])  # Display 3PL name
+                lbl_company.config(text='Company: ' + row[1])  # Display company name
+                break
 
-# Toggle company sound function
-def toggle_company_sound():
-    global enable_company_sound
-    enable_company_sound = not enable_company_sound
-    if enable_company_sound:
-        info_label.config(text=info_label.cget("text") + "\nCompany sound enabled.")
-    else:
-        info_label.config(text=info_label.cget("text") + "\nCompany sound disabled.")
+        if valid:
+            # Append data to Data sheet
+            values = [awb]
+            body = {'values': [values]}
+            service.spreadsheets().values().append(
+                spreadsheetId=SHEET_ID,
+                range='Data!A:A',
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body=body
+            ).execute()
+            # Play true validation sound
+            winsound.PlaySound('sound1.wav', winsound.SND_FILENAME)
+            lbl_message.config(text='Data added successfully!')
+        else:
+            lbl_message.config(text='Invalid AWB!')
+            # Play false validation sound
+            winsound.PlaySound('sound2.wav', winsound.SND_FILENAME)
 
-# Create the GUI elements
-barcode_label = tk.Label(app, text="Scanned Barcode: ")
-barcode_label.pack()
+    # Clear entry field after submitting
+    entry_awb.delete(0, tk.END)
 
-info_label = tk.Label(app, text="")
-info_label.pack()
+# Submit button
+btn_submit = tk.Button(root, text='Submit', command=submit_data)
+btn_submit.grid(row=0, column=2)
 
-scan_button = tk.Button(app, text="Scan Barcodes", command=scan_barcodes)
-scan_button.pack()
+# Bind Enter key to submit data
+root.bind('<Return>', submit_data)
 
-manual_entry_frame = tk.Frame(app)
-manual_entry_frame.pack()
-
-manual_entry_label = tk.Label(manual_entry_frame, text="Manual Entry: ")
-manual_entry_label.pack(side=tk.LEFT)
-
-barcode_entry = tk.Entry(manual_entry_frame)
-barcode_entry.pack(side=tk.LEFT)
-barcode_entry.bind('<Return>', manual_entry)  # Bind Enter key press to manual_entry function
-
-toggle_sound_button = tk.Button(app, text="Toggle Company Sound", command=toggle_company_sound)
-toggle_sound_button.pack()
-
-# Initialize the company sound status
-enable_company_sound = True
-
-# Start the Tkinter event loop
-app.mainloop()
+# Run the GUI
+root.mainloop()
